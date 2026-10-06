@@ -1,0 +1,9 @@
+.data/
+qa/
+tests/.kernel-fixture/
+tests/.local-fixture/
+node_modules/
+*.zip
+*.log
+.env
+.env.*

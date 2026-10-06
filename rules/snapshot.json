@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "repository": "MetaCubeX/meta-rules-dat",
+  "branch": "meta",
+  "sourceCommit": "0b354375b24a493049d1f9e0e8517b3b6311702f",
+  "sourceUrl": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/0b354375b24a493049d1f9e0e8517b3b6311702f/geo/geosite/category-porn.yaml",
+  "generatedAtUtc": "2026-10-04T15:11:29.4637084Z",
+  "count": 6520,
+  "exactCount": 5,
+  "suffixCount": 6515,
+  "sourceYamlSha256": "1cc1105023ef9f3d02f4d4a8b2f6f52bde6e92c4c99bb1867a79f91477eaf946"
+}

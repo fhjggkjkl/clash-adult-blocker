@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>成人网站拦截 · 本地配置工具</title>
+  <style>
+    :root{color-scheme:light;--ink:#193329;--muted:#61766b;--green:#246b50;--line:#dce7df;--paper:#fff;--bg:#f2f7f1;--soft:#edf5eb;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.65}main{max-width:880px;margin:auto;padding:30px 20px 44px}.eyebrow{font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--green)}h1{font-size:clamp(25px,5vw,35px);line-height:1.25;margin:7px 0 13px;letter-spacing:-.03em}p{margin:0 0 13px}.intro{max-width:650px;color:var(--muted)}.chips{display:flex;gap:7px;flex-wrap:wrap;margin:16px 0 24px}.chip{background:#e3efe1;border:1px solid #d4e4d2;border-radius:30px;padding:4px 10px;font-size:12px;color:#3b6545}.panel{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:23px;margin:16px 0;box-shadow:0 5px 18px #26412c05}h2{font-size:20px;margin:0 0 15px}.step{display:inline-grid;place-items:center;width:27px;height:27px;font-size:14px;color:var(--green);background:var(--soft);border-radius:8px;margin-right:8px}label{display:block;font-weight:650;margin:15px 0 7px}.help{font-size:13px;color:var(--muted);margin:6px 0 12px}textarea,select,input[type=file]{font:inherit;color:var(--ink);width:100%;border:1px solid #cbd9ce;border-radius:10px;background:#fbfdfb}textarea{resize:vertical;min-height:180px;line-height:1.55;padding:13px;font-size:13px;font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere}textarea.small{min-height:105px}select,input[type=file]{padding:10px}input[type=file]::file-selector-button{background:var(--soft);color:var(--green);border:0;border-radius:6px;padding:7px 10px;margin-right:9px;cursor:pointer}textarea:focus,select:focus,input:focus,button:focus-visible,a:focus-visible{outline:3px solid #a5c9ab;outline-offset:2px}.check{display:flex;align-items:flex-start;gap:10px;font-weight:500;margin:13px 0}.check input{flex-shrink:0;accent-color:var(--green);width:18px;height:18px;margin-top:4px}.check small{display:block;color:var(--muted);font-size:12px;font-weight:400}.check.disabled{opacity:.5}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}button{font:inherit;font-weight:650;border-radius:10px;padding:11px 19px;cursor:pointer;border:1px solid #ccdcd0;background:#fff;color:var(--green)}button.primary{background:var(--green);color:white;border-color:var(--green)}button:disabled{opacity:.45;cursor:default}.status{margin-top:15px;padding:10px 13px;border-radius:9px;background:var(--soft);font-size:13px;overflow-wrap:anywhere}.status:empty{display:none}.status.error{background:#fff0eb;color:#a13921}.notice{padding:12px 14px;background:#f5f7ee;border-radius:10px;font-size:13px;margin-bottom:16px}.instructions{margin:8px 0 0;padding-left:22px;font-size:14px}.instructions li{margin:7px 0}.footer{font-size:12px;color:var(--muted);padding:6px 3px;overflow-wrap:anywhere}.footer a{color:var(--green)}.file-name{font-size:12px;color:var(--muted);margin-top:5px}#output{min-height:200px}.summary{font-size:13px;color:var(--muted);margin-bottom:10px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.grid label{margin-top:0}[hidden]{display:none!important}@media(max-width:600px){main{padding:23px 13px 28px}.panel{padding:18px 16px;border-radius:14px}.grid{grid-template-columns:1fr;gap:6px}.actions button{flex:1;padding-left:12px;padding-right:12px}h2{font-size:18px}.intro{font-size:14px}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">ANDROID · CHROME</div>
+  <h1>给浏览器加一道拦截</h1>
+  <p class="intro">粘贴现有订阅或配置，加入成人网站拦截，再导出订阅链接到手机 Clash。Chrome 照常使用。</p>
+  <div class="chips"><span class="chip">全程本地处理</span><span class="chip">配置不会上传</span><span class="chip">保留原有节点与分流</span></div>
+  <div class="notice">此工具生成客户端配置文件。手机需要已安装支持 Clash / Mihomo 配置的客户端，并开启 VPN 或 TUN，让 Chrome 流量经过客户端。名单可能有遗漏或误判，不能保证拦住所有成人内容。</div>
+
+  <section class="panel" aria-labelledby="input-title">
+    <h2 id="input-title"><span class="step">1</span>导入现有配置</h2>
+    <label for="subscription">订阅链接（可直接读取）</label>
+    <input id="subscription" type="url" autocomplete="off" spellcheck="false" placeholder="https://… 你的 Clash / Mihomo 订阅链接" style="font:inherit;width:100%;padding:11px 13px;border:1px solid #cbd9ce;border-radius:10px;background:#fbfdfb">
+    <div class="actions"><button id="read-subscription" type="button" class="primary">读取订阅并生成</button></div>
+    <p class="help" id="subscription-help">双击「启动工具.cmd」打开本地网页版，支持读取订阅和导出订阅链接。</p>
+    <label for="file">选择 YAML 文件（可选）</label>
+    <input id="file" type="file" accept=".yaml,.yml,.txt,text/yaml,text/plain">
+    <div class="file-name" id="file-name"></div>
+    <label for="config">或粘贴配置文本 / 订阅链接（无需选择文件）</label>
+    <textarea id="config" spellcheck="false" placeholder="粘贴完整 YAML / JSON 配置，或 https 开头的 Clash / Mihomo 订阅链接。"></textarea>
+    <p class="help">直接粘贴订阅链接或完整 YAML / JSON 配置，不需要选择文件。订阅读取和链接导出请通过「启动工具.cmd」打开本地网页版。生成后会重新排版 YAML，原注释不保留。</p>
+  </section>
+
+  <section class="panel" aria-labelledby="settings-title">
+    <h2 id="settings-title"><span class="step">2</span>选择拦截设置</h2>
+    <div class="grid">
+      <div>
+        <label for="format">客户端兼容格式</label>
+        <select id="format"><option value="meta">Mihomo / Clash Meta（推荐）</option><option value="legacy">旧版 Clash（普通规则）</option></select>
+        <p class="help">Mihomo 格式使用内嵌名单；旧版格式展开为普通域名规则。</p>
+      </div>
+      <div>
+        <label for="extra">额外要拦截的网站（可选）</label>
+        <textarea id="extra" class="small" spellcheck="false" placeholder="每行一个域名或网址，例如：&#10;blocked.example.com&#10;https://another.example.com/path"></textarea>
+        <p class="help">会同时拦截该域名及其子域名。中文域名也支持。</p>
+      </div>
+    </div>
+    <label class="check" id="sniff-label"><input id="sniff" type="checkbox" checked><span>辅助识别 HTTPS 域名（推荐）<small>适用于 Mihomo / Clash Meta；合并现有识别设置，保留原 DNS 配置。</small></span></label>
+    <label class="check"><input id="safe-test" type="checkbox" checked><span>加入安全测试域名<small>添加 guard-check.example.com 拦截规则，方便在客户端连接日志中验证。</small></span></label>
+    <div class="actions"><button id="generate" type="button" class="primary">生成拦截配置</button></div>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section id="result" class="panel" aria-labelledby="output-title" hidden>
+    <h2 id="output-title"><span class="step">3</span>导出订阅链接</h2>
+    <div id="summary" class="summary"></div>
+    <p id="subscription-info" class="help"></p>
+    <div class="actions"><button id="export-link" type="button" class="primary">导出订阅链接</button></div>
+    <div id="link-result" hidden>
+      <label for="subscription-output">订阅链接（在 Clash 的 URL 导入中粘贴）</label>
+      <input id="subscription-output" type="text" readonly style="font:inherit;width:100%;padding:11px;border:1px solid #cbd9ce;border-radius:10px">
+      <div class="actions"><button id="copy-link" type="button" class="primary">复制订阅链接</button><button id="copy-import" type="button">复制一键导入链接</button><button id="revoke-link" type="button">停用链接</button></div>
+      <p class="help">导入或更新时，保持电脑上的本地服务运行，并确保手机能访问链接中的电脑地址。链接包含配置的访问凭证，请妥善保管。重新生成后再次导出，会更新这个链接的内容。</p>
+    </div>
+    <details style="margin-top:16px"><summary>查看配置或下载 YAML</summary>
+    <label for="output">生成后的完整 YAML</label>
+    <textarea id="output" readonly spellcheck="false"></textarea>
+    <div class="actions"><button id="download" type="button" class="primary">下载 YAML</button><button id="copy" type="button">复制配置</button></div>
+    </details>
+    <ol class="instructions">
+      <li>在手机客户端新建配置，选择「从 URL 导入」，粘贴上方订阅链接，下载后选中配置并启用规则模式。</li>
+      <li>打开客户端 VPN / TUN，确认 Chrome 流量经过客户端。</li>
+      <li id="test-step">在 Chrome 打开 https://guard-check.example.com，再在客户端连接日志中确认命中 REJECT。该地址本身可能打不开，仅凭打不开不能判断拦截成功。</li>
+    </ol>
+    <p class="help">原订阅节点更新后，请重新读取、生成并导出，在手机中更新这个订阅。关闭客户端或换用其他配置会使拦截失效。</p>
+  </section>
+  <div class="footer" id="source"></div>
+  <div class="footer"><button id="stop-service" type="button" hidden>停止本地服务</button></div>
+</main>
+<script>__YAML_LIB__</script>
+<script>__CORE_JS__</script>
+<script>
+  'use strict';
+  const DEFAULT_PAYLOAD = __DEFAULT_PAYLOAD__;
+  const SOURCE_META = __SOURCE_META__;
+  const $ = id => document.getElementById(id);
+  let outputText = '';
+  let preferredSniff = true;
+  let configRevision = 0;
+  let outputRevision = 0;
+  let exportId = null;
+  let importLink = '';
+  let subscriptionLink = '';
+  let subscriptionMetadata = {};
+  const serviceToken = document.querySelector('meta[name="local-subscription-token"]')?.content;
+  const subscriptionEnabled = !!serviceToken && /^https?:$/.test(location.protocol);
+  $('read-subscription').disabled = !subscriptionEnabled;
+  $('export-link').disabled = !subscriptionEnabled;
+  $('stop-service').hidden = !subscriptionEnabled;
+  if (subscriptionEnabled) $('subscription-help').textContent = '点击后，电脑会直接向此订阅提供方请求 Clash 配置。链接和配置不经过第三方转换网站。';
+  function status(message, error) { $('status').textContent = message; $('status').classList.toggle('error', !!error); }
+  try { exportId = localStorage.getItem('guard-export-' + serviceToken); } catch (_) {}
+  function invalidate() { outputText = ''; outputRevision++; $('result').hidden = true; $('link-result').hidden = true; }
+  $('config').addEventListener('input', () => { configRevision++; subscriptionMetadata = {}; $('file-name').textContent = ''; invalidate(); });
+  $('extra').addEventListener('input', invalidate);
+  $('sniff').addEventListener('change', () => { preferredSniff = $('sniff').checked; invalidate(); });
+  $('safe-test').addEventListener('change', invalidate);
+  $('format').addEventListener('change', () => { const legacy = $('format').value === 'legacy'; $('sniff').disabled = legacy; $('sniff').checked = legacy ? false : preferredSniff; $('sniff-label').classList.toggle('disabled', legacy); invalidate(); });
+  $('file').addEventListener('change', async () => {
+    const file = $('file').files[0];
+    if (!file) return;
+    const revision = ++configRevision;
+    subscriptionMetadata = {};
+    invalidate();
+    if (file.size > 12 * 1024 * 1024) { status('文件超过 12 MB，请选择较小的完整配置。', true); return; }
+    try { const text = await file.text(); if (revision !== configRevision) return; $('config').value = text; $('file-name').textContent = file.name + ' · ' + Math.ceil(file.size / 1024) + ' KB'; status('文件已读入，可以生成拦截配置。'); }
+    catch (_) { status('读取文件失败，请重新选择，或直接粘贴配置。', true); }
+  });
+  function generateConfig(notice = '') {
+    invalidate();
+    try {
+      const result = LocalAdultGuard.patch({ yaml: jsyaml, defaultsPayload: DEFAULT_PAYLOAD, configText: $('config').value, extraBlock: $('extra').value, legacy: $('format').value === 'legacy', safeTest: $('safe-test').checked, sniff: $('sniff').checked });
+      outputText = result.text; $('output').value = outputText; $('result').hidden = false;
+      $('test-step').hidden = !result.stats.safeTest;
+      $('summary').textContent = '内置 ' + result.stats.defaults.toLocaleString('zh-CN') + ' 条域名匹配项 · 额外 ' + result.stats.manual + ' 个网站 · ' + (result.stats.legacy ? '普通规则格式' : 'Mihomo 内嵌格式');
+      $('subscription-info').textContent = subscriptionMetadata.userinfo ? '已保留原订阅的流量和到期信息，导入链接时会一起提供给客户端。数值为本次读取时的快照；更新流量请重新读取原订阅并导出。' : '当前配置没有订阅流量信息。从文件或配置文本导入无法获得这项信息；原订阅提供方也可能未返回。';
+      status('已生成。原有节点、分流和 DNS 配置已保留，运行模式设为规则模式。' + (notice ? ' ' + notice : ''));
+      $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) { status(error.message || '生成失败，请检查配置格式。', true); }
+  }
+  $('generate').addEventListener('click', () => {
+    const text = $('config').value.trim();
+    if (/^https?:\/\/\S+$/i.test(text)) { $('subscription').value = text; return readSubscription(text); }
+    if (!text && $('subscription').value.trim()) return readSubscription($('subscription').value.trim());
+    generateConfig();
+  });
+  async function readSubscription(url) {
+    invalidate();
+    if (!subscriptionEnabled) { status('已识别为订阅链接。请双击完整工具包中的「启动工具.cmd」，在打开的本地网页粘贴链接后生成。', true); return; }
+    let parsed;
+    try { parsed = new URL(url); if (parsed.protocol !== 'https:') throw new Error(); }
+    catch (_) { status('请填写有效的 https 订阅链接。', true); return; }
+    const revision = configRevision;
+    invalidate(); $('read-subscription').disabled = true; $('generate').disabled = true;
+    status('正在向订阅提供方读取配置，请稍候…');
+    try {
+      const response = await fetch('/api/subscription', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Guard-Token': serviceToken }, body: JSON.stringify({ url }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '读取失败，请检查订阅链接。');
+      if (revision !== configRevision) { status('你已修改配置文本，已保留当前输入；请重新读取订阅。'); return; }
+      const prepared = LocalAdultGuard.prepareSubscription({ yaml: jsyaml, text: data.text });
+      subscriptionMetadata = data.metadata || {};
+      $('config').value = prepared.text; configRevision++;
+      $('file-name').textContent = '配置来源：订阅读取';
+      generateConfig(prepared.notice || data.notice || '');
+    } catch (error) { status(error.message || '读取失败，请检查链接和网络连接。', true); }
+    finally { $('read-subscription').disabled = false; $('generate').disabled = false; }
+  }
+  $('read-subscription').addEventListener('click', () => readSubscription($('subscription').value.trim()));
+  async function api(route, method, body) {
+    const response = await fetch(route, { method, headers: { 'Content-Type': 'application/json', 'X-Guard-Token': serviceToken }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '操作失败，请重试。');
+    return data;
+  }
+  $('export-link').addEventListener('click', async () => {
+    if (!outputText || !subscriptionEnabled) return;
+    const revision = outputRevision, text = outputText, metadata = subscriptionMetadata;
+    $('export-link').disabled = true;
+    status('正在导出本地订阅链接…');
+    try {
+      let data;
+      try { data = await api('/api/exports', 'POST', { configText: text, metadata, ...(exportId ? { exportId } : {}) }); }
+      catch (error) { if (!exportId || !/已停用/.test(error.message)) throw error; exportId = null; data = await api('/api/exports', 'POST', { configText: text, metadata }); }
+      exportId = data.id;
+      try { localStorage.setItem('guard-export-' + serviceToken, exportId); } catch (_) {}
+      if (revision !== outputRevision) { status('导出的链接保存的是刚才的配置；当前输入已变化，请重新生成并导出。'); return; }
+      subscriptionLink = data.url;
+      $('subscription-output').value = subscriptionLink;
+      importLink = 'clash://install-config?url=' + encodeURIComponent(data.url) + '&name=' + encodeURIComponent('成人网站拦截');
+      $('link-result').hidden = false;
+      status('订阅链接已生成。手机 Clash 选择“从 URL 导入”，粘贴这个链接即可。');
+    } catch (error) { status(error.message || '导出失败，请确认本地服务正在运行。', true); }
+    finally { $('export-link').disabled = false; }
+  });
+  async function copyLink(text) {
+    try { if (!navigator.clipboard?.writeText) throw new Error(); await navigator.clipboard.writeText(text); status('链接已复制。'); }
+    catch (_) {
+      const field = $('subscription-output'), previous = field.value;
+      field.value = text; field.focus(); field.select(); field.setSelectionRange(0, text.length);
+      try { if (document.execCommand('copy')) { field.value = previous; status('链接已复制。'); return; } } catch (_) {}
+      status('已选中链接，请复制。复制后可再次点击导出显示订阅地址。');
+    }
+  }
+  $('copy-link').addEventListener('click', () => copyLink(subscriptionLink));
+  $('copy-import').addEventListener('click', () => copyLink(importLink));
+  $('revoke-link').addEventListener('click', async () => {
+    if (!exportId) return;
+    try { await api('/api/exports/' + exportId, 'DELETE'); exportId = null; try { localStorage.removeItem('guard-export-' + serviceToken); } catch (_) {} $('link-result').hidden = true; status('链接已停用，可重新导出新的链接。'); }
+    catch (error) { status(error.message || '停用失败，请重试。', true); }
+  });
+  $('stop-service').addEventListener('click', async () => {
+    try { await api('/api/stop', 'POST'); $('read-subscription').disabled = true; $('export-link').disabled = true; $('stop-service').disabled = true; status('本地服务已停止。需要导入或更新时，再双击启动工具。'); }
+    catch (error) { status(error.message || '停止失败，请重试。', true); }
+  });
+  $('download').addEventListener('click', () => {
+    if (!outputText) return;
+    const url = URL.createObjectURL(new Blob([outputText], { type: 'application/yaml;charset=utf-8' }));
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'clash-adult-guard.yaml'; document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    status('已请求保存 clash-adult-guard.yaml。请在客户端导入这个文件。');
+  });
+  $('copy').addEventListener('click', async () => {
+    if (!outputText) return;
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(outputText); status('配置已复制。');
+    } catch (_) {
+      $('output').focus(); $('output').select(); $('output').setSelectionRange(0, $('output').value.length);
+      try { if (document.execCommand('copy')) { status('配置已复制。'); return; } } catch (_) {}
+      status('浏览器未允许自动复制。已选中配置，请长按选择“复制”。');
+    }
+  });
+  const sourceName = SOURCE_META.sourceName || SOURCE_META.name || 'MetaCubeX / meta-rules-dat · category-porn';
+  const sourceDate = SOURCE_META.date || SOURCE_META.retrieved || '';
+  $('source').textContent = '内置名单：' + sourceName + '，' + DEFAULT_PAYLOAD.length.toLocaleString('zh-CN') + ' 条。' + (sourceDate ? '取用日期：' + sourceDate + '。' : '') + '名单随工具附带，不会自动联网更新。';
+</script>
+</body>
+</html>
