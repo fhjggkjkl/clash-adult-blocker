@@ -15,14 +15,14 @@
   <div class="eyebrow">ANDROID · CHROME</div>
   <h1>给浏览器加一道拦截</h1>
   <p class="intro">粘贴现有订阅或配置，加入成人网站拦截，再导出订阅链接到手机 Clash。Chrome 照常使用。</p>
-  <div class="chips"><span class="chip">全程本地处理</span><span class="chip">配置不会上传</span><span class="chip">保留原有节点与分流</span></div>
+  <div class="chips"><span class="chip">本地生成配置</span><span class="chip">手机流量也能导入</span><span class="chip">保留原有节点与分流</span></div>
   <div class="notice">此工具生成客户端配置文件。手机需要已安装支持 Clash / Mihomo 配置的客户端，并开启 VPN 或 TUN，让 Chrome 流量经过客户端。名单可能有遗漏或误判，不能保证拦住所有成人内容。</div>
 
   <section class="panel" aria-labelledby="input-title">
     <h2 id="input-title"><span class="step">1</span>导入现有配置</h2>
     <label for="subscription">订阅链接（可直接读取）</label>
     <input id="subscription" type="url" autocomplete="off" spellcheck="false" placeholder="https://… 你的 Clash / Mihomo 订阅链接" style="font:inherit;width:100%;padding:11px 13px;border:1px solid #cbd9ce;border-radius:10px;background:#fbfdfb">
-    <div class="actions"><button id="read-subscription" type="button" class="primary">读取订阅并生成</button></div>
+    <div class="actions"><button id="one-click" type="button" class="primary">一键生成手机订阅链接</button><button id="read-subscription" type="button">仅读取并生成配置</button></div>
     <p class="help" id="subscription-help">双击「启动工具.cmd」打开本地网页版，支持读取订阅和导出订阅链接。</p>
     <label for="file">选择 YAML 文件（可选）</label>
     <input id="file" type="file" accept=".yaml,.yml,.txt,text/yaml,text/plain">
@@ -56,12 +56,13 @@
     <h2 id="output-title"><span class="step">3</span>导出订阅链接</h2>
     <div id="summary" class="summary"></div>
     <p id="subscription-info" class="help"></p>
-    <div class="actions"><button id="export-link" type="button" class="primary">导出订阅链接</button></div>
+    <div class="actions"><button id="export-internet" type="button" class="primary">导出外网订阅链接</button><button id="export-link" type="button">导出局域网链接</button></div>
+    <p class="help">外网链接可用手机流量或其他 Wi-Fi 导入，通过第三方通道转发下载，电脑和工具须保持运行。免费地址可能变化，变化后请重新生成并更新客户端地址。配置在本机保存，通道提供方会处理下载内容。</p>
     <div id="link-result" hidden>
       <label for="subscription-output">订阅链接（在 Clash 的 URL 导入中粘贴）</label>
       <input id="subscription-output" type="text" readonly style="font:inherit;width:100%;padding:11px;border:1px solid #cbd9ce;border-radius:10px">
       <div class="actions"><button id="copy-link" type="button" class="primary">复制订阅链接</button><button id="copy-import" type="button">复制一键导入链接</button><button id="revoke-link" type="button">停用链接</button></div>
-      <p class="help">导入或更新时，保持电脑上的本地服务运行，并确保手机能访问链接中的电脑地址。链接包含配置的访问凭证，请妥善保管。重新生成后再次导出，会更新这个链接的内容。</p>
+      <p class="help" id="link-help">链接包含配置的访问凭证，请妥善保管。重新生成后再次导出，会更新这个链接的内容。</p>
     </div>
     <details style="margin-top:16px"><summary>查看配置或下载 YAML</summary>
     <label for="output">生成后的完整 YAML</label>
@@ -343,6 +344,8 @@
   const serviceToken = document.querySelector('meta[name="local-subscription-token"]')?.content;
   const subscriptionEnabled = !!serviceToken && /^https?:$/.test(location.protocol);
   $('read-subscription').disabled = !subscriptionEnabled;
+  $('one-click').disabled = !subscriptionEnabled;
+  $('export-internet').disabled = !subscriptionEnabled;
   $('export-link').disabled = !subscriptionEnabled;
   $('stop-service').hidden = !subscriptionEnabled;
   if (subscriptionEnabled) $('subscription-help').textContent = '点击后，电脑会直接向此订阅提供方请求 Clash 配置。链接和配置不经过第三方转换网站。';
@@ -411,15 +414,17 @@
     if (!response.ok) throw new Error(data.error || '操作失败，请重试。');
     return data;
   }
-  $('export-link').addEventListener('click', async () => {
+  async function exportSubscription(access) {
     if (!outputText || !subscriptionEnabled) return;
     const revision = outputRevision, text = outputText, metadata = subscriptionMetadata;
     $('export-link').disabled = true;
-    status('正在导出本地订阅链接…');
+    $('export-internet').disabled = true;
+    status(access === 'internet' ? '正在连接外网通道并生成手机链接，首次可能需要十几秒…' : '正在导出局域网订阅链接…');
     try {
       let data;
-      try { data = await api('/api/exports', 'POST', { configText: text, metadata, ...(exportId ? { exportId } : {}) }); }
-      catch (error) { if (!exportId || !/已停用/.test(error.message)) throw error; exportId = null; data = await api('/api/exports', 'POST', { configText: text, metadata }); }
+      try { data = await api('/api/exports', 'POST', { configText: text, metadata, access, ...(exportId ? { exportId } : {}) }); }
+      catch (error) { if (!exportId || !/已停用/.test(error.message)) throw error; exportId = null; data = await api('/api/exports', 'POST', { configText: text, metadata, access }); }
+      if (access === 'internet' && (data.access !== 'internet' || new URL(data.url).protocol !== 'https:')) throw new Error('正在运行旧版服务，请停止本地服务，再双击新版启动入口后重新生成外网链接。');
       exportId = data.id;
       try { localStorage.setItem('guard-export-' + serviceToken, exportId); } catch (_) {}
       if (revision !== outputRevision) { status('导出的链接保存的是刚才的配置；当前输入已变化，请重新生成并导出。'); return; }
@@ -427,9 +432,24 @@
       $('subscription-output').value = subscriptionLink;
       importLink = 'clash://install-config?url=' + encodeURIComponent(data.url) + '&name=' + encodeURIComponent('成人网站拦截');
       $('link-result').hidden = false;
-      status('订阅链接已生成。手机 Clash 选择“从 URL 导入”，粘贴这个链接即可。');
+      $('link-help').textContent = access === 'internet'
+        ? '手机用流量或其他 Wi-Fi 都可以导入。导入、更新时电脑和工具须保持运行；免费地址可能变化。链接可下载含节点信息的配置，请勿公开分享。'
+        : '局域网链接需要手机能访问电脑地址，通常要连接同一 Wi-Fi。导入和更新时保持电脑服务运行。链接可下载含节点信息的配置，请勿公开分享。';
+      status(access === 'internet' ? '手机订阅链接已生成并检查连通。手机 Clash 选择“从 URL 导入”即可，无需同一 Wi-Fi。' : '局域网链接已生成。手机连接电脑所在网络后，使用 Clash 的“从 URL 导入”。');
     } catch (error) { status(error.message || '导出失败，请确认本地服务正在运行。', true); }
-    finally { $('export-link').disabled = false; }
+    finally { $('export-link').disabled = false; $('export-internet').disabled = false; }
+  }
+  $('export-link').addEventListener('click', () => exportSubscription('lan'));
+  $('export-internet').addEventListener('click', () => exportSubscription('internet'));
+  $('one-click').addEventListener('click', async () => {
+    if (!subscriptionEnabled) return;
+    $('one-click').disabled = true;
+    try {
+      const input = $('config').value.trim();
+      const url = $('subscription').value.trim() || (/^https?:\/\/\S+$/i.test(input) ? input : '');
+      if (url) await readSubscription(url); else generateConfig();
+      if (outputText) await exportSubscription('internet');
+    } finally { $('one-click').disabled = false; }
   });
   async function copyLink(text) {
     try { if (!navigator.clipboard?.writeText) throw new Error(); await navigator.clipboard.writeText(text); status('链接已复制。'); }
@@ -448,7 +468,7 @@
     catch (error) { status(error.message || '停用失败，请重试。', true); }
   });
   $('stop-service').addEventListener('click', async () => {
-    try { await api('/api/stop', 'POST'); $('read-subscription').disabled = true; $('export-link').disabled = true; $('stop-service').disabled = true; status('本地服务已停止。需要导入或更新时，再双击启动工具。'); }
+    try { await api('/api/stop', 'POST'); $('read-subscription').disabled = true; $('one-click').disabled = true; $('export-link').disabled = true; $('export-internet').disabled = true; $('stop-service').disabled = true; status('本地服务和外网通道已停止。需要导入或更新时，再双击启动工具。'); }
     catch (error) { status(error.message || '停止失败，请重试。', true); }
   });
   $('download').addEventListener('click', () => {

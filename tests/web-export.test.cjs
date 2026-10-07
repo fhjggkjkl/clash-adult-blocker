@@ -7,6 +7,7 @@ const os = require('node:os');
 const vm = require('node:vm');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
+const http = require('node:http');
 const yaml = require('../vendor/js-yaml.min.js');
 const guard = require('../src/guard-core.js');
 const root = path.resolve(__dirname, '..');
@@ -116,6 +117,47 @@ test('Existing YAML exports retain their links after upgrading the storage forma
   await store.delete(id);
   assert.equal(await store.get(id), null);
 });
+
+test('One click reads the upstream, adds manual blocks, and exports an internet link with quota', async t => {
+  const { createServer, fileStore } = await import('../src/web-server.mjs');
+  const fixture = await fs.mkdtemp(path.join(os.tmpdir(), 'adult-guard-one-click-'));
+  const store = fileStore(fixture), ownerToken = 'f'.repeat(64), published = new Set();
+  let reads = 0, starts = 0;
+  const internetTunnel = { async ensure() { starts++; return 'https://oneclick.lhr.life'; }, publish(id) { published.add(id); }, unpublish(id) { published.delete(id); }, async close() {} };
+  const server = createServer({ ownerToken, store, internetTunnel, allowLocal: true, publicBaseUrl: 'http://192.168.1.4:17896',
+    readRemote: async () => { reads++; return { text: yaml.dump(original), metadata }; } });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const html = await (await fetch(base + '/tool/' + ownerToken)).text();
+  const elements = page(html, (route, options) => fetch(base + route, options), async () => {});
+  elements.get('subscription').value = 'https://subscription.example/fake';
+  elements.get('extra').value = 'manual.example.com';
+  await elements.get('one-click').fire('click');
+  assert.equal(reads, 1); assert.equal(starts, 1);
+  const url = new URL(elements.get('subscription-output').value);
+  assert.equal(url.origin, 'https://oneclick.lhr.life');
+  assert.equal(elements.get('link-result').hidden, false);
+  const id = url.pathname.match(/([a-f0-9]{64})\.yaml$/)[1];
+  assert.ok(published.has(id));
+  const record = await store.getRecord(id), config = yaml.load(record.text);
+  assert.deepEqual(record.metadata, metadata);
+  assert.deepEqual(config.proxies, original.proxies);
+  assert.equal(config.rules[0], 'DOMAIN-SUFFIX,manual.example.com,REJECT');
+  assert.match(elements.get('link-help').textContent, /流量或其他 Wi-Fi/);
+  assert.equal(elements.get('one-click').disabled, false);
+});
+
+test('The page rejects a LAN URL when an old service ignores an internet export request', async () => {
+  const ownerToken = 'a'.repeat(64);
+  const html = (await fs.readFile(path.join(root, 'clash-adult-guard.html'), 'utf8')).replace('</head>', '<meta name="local-subscription-token" content="' + ownerToken + '"></head>');
+  const elements = page(html, async () => new Response(JSON.stringify({ id: 'b'.repeat(64), url: 'http://192.168.1.4:17896/sub/' + 'b'.repeat(64) + '.yaml' })), async () => {});
+  elements.get('config').value = yaml.dump(original);
+  await elements.get('generate').fire('click');
+  await elements.get('export-internet').fire('click');
+  assert.equal(elements.get('link-result').hidden, true);
+  assert.match(elements.get('status').textContent, /旧版服务/);
+});
 test('The real HTML export and copy buttons produce a valid subscription and Clash import URI', async t => {
   const { createServer } = await import('../src/web-server.mjs');
   const records = new Map(), ownerToken = 'b'.repeat(64);
@@ -190,4 +232,41 @@ test('The actual launcher server starts, is reused on reopening, and stops from 
   const stop = await fetch(new URL('/api/stop', one.localUrl), { method: 'POST', headers: { 'X-Guard-Token': 'c'.repeat(64) } });
   assert.equal(stop.status, 200);
   assert.equal(await first.closed, 0);
+});
+
+test('Reopening the launcher replaces its owned old service and retains saved configuration files', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'adult-guard-old-service-'));
+  const ownerToken = 'd'.repeat(64);
+  const exportPath = path.join(directory, 'saved-fixture.yaml');
+  await fs.writeFile(exportPath, generated.text, 'utf8');
+  let stopped = 0;
+  const old = http.createServer((request, response) => {
+    if (request.url === '/tool/' + ownerToken) {
+      response.writeHead(200, { 'Content-Type': 'text/html' });
+      response.end('<meta name="local-subscription-token" content="' + ownerToken + '">');
+    } else if (request.url === '/api/stop' && request.headers['x-guard-token'] === ownerToken) {
+      stopped++;
+      response.writeHead(200, { 'Content-Type': 'application/json' }); response.end('{"stopped":true}');
+      setTimeout(() => { old.closeAllConnections(); old.close(); }, 25);
+    } else { response.writeHead(404); response.end(); }
+  });
+  await new Promise(resolve => old.listen(0, '127.0.0.1', resolve));
+  await fs.writeFile(path.join(directory, 'server.json'), JSON.stringify({ port: old.address().port }), 'utf8');
+  t.after(() => { old.closeAllConnections(); old.close(); });
+  const child = spawn(process.execPath, [path.join(root, 'src/web-server.mjs')], {
+    windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, HOST: '127.0.0.1', PORT: '0', GUARD_DATA_DIR: directory, GUARD_ADMIN_TOKEN: ownerToken }
+  });
+  t.after(() => { if (child.exitCode === null) child.kill(); });
+  const ready = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Owned service upgrade timed out')), 8000);
+    readline.createInterface({ input: child.stdout }).once('line', line => { clearTimeout(timer); resolve(JSON.parse(line)); });
+    child.once('error', reject);
+  });
+  assert.equal(stopped, 1);
+  const html = await (await fetch(ready.localUrl)).text();
+  assert.match(html, /local-service-version" content="0\.3\.0/);
+  assert.equal(await fs.readFile(exportPath, 'utf8'), generated.text);
+  const closed = new Promise(resolve => child.once('close', resolve));
+  await fetch(new URL('/api/stop', ready.localUrl), { method: 'POST', headers: { 'X-Guard-Token': ownerToken } });
+  assert.equal(await closed, 0);
 });

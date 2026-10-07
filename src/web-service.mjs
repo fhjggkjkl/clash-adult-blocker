@@ -1,6 +1,7 @@
 import metadataHelpers from './subscription-metadata.cjs';
 const { normalizeMetadata } = metadataHelpers;
 const LIMIT = 12 * 1024 * 1024;
+export const SERVICE_VERSION = '0.3.0';
 const tokenPattern = /^[a-f0-9]{64}$/;
 const encoder = new TextEncoder();
 function json(data, status = 200) {
@@ -66,7 +67,7 @@ export function createWebHandler(options) {
     if (request.method === 'GET' && url.pathname === '/tool/' + ownerToken) {
       let html = typeof options.html === 'function' ? await options.html(request) : options.html;
       html = html.replace("connect-src 'none'", "connect-src 'self'");
-      html = html.replace('</head>', () => '<meta name="local-subscription-token" content="' + ownerToken + '">\n</head>');
+      html = html.replace('</head>', () => '<meta name="local-subscription-token" content="' + ownerToken + '">\n<meta name="local-service-version" content="' + SERVICE_VERSION + '">\n</head>');
       return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' } });
     }
     if (!url.pathname.startsWith('/api/')) return json({ error: '请使用服务管理员提供的工具入口。' }, 404);
@@ -80,8 +81,6 @@ export function createWebHandler(options) {
         return json({ text: typeof remote === 'string' ? remote : remote.text, metadata: normalizeMetadata(remote.metadata), notice: '' });
       }
       if (request.method === 'POST' && url.pathname === '/api/exports') {
-        const target = typeof options.publicBaseUrl === 'function' ? options.publicBaseUrl() : options.publicBaseUrl;
-        const base = publicOrigin(target || url.origin, options.allowLocal === true);
         const input = await inputJson(request);
         if (typeof input.configText !== 'string' || !input.configText.trim() || encoder.encode(input.configText).length > LIMIT) throw new Error('请先生成有效的完整配置，再导出订阅链接。');
         if (!/^rules:/m.test(input.configText) || !/^(?:proxies|proxy-providers):/m.test(input.configText)) throw new Error('导出内容必须是包含节点和分流规则的完整配置。');
@@ -90,11 +89,22 @@ export function createWebHandler(options) {
           if (!tokenPattern.test(input.exportId) || await store.get(input.exportId) === null) return json({ error: '原链接已停用，请重新导出。' }, 404);
           token = input.exportId;
         } else { token = randomToken(); }
+        if (input.access !== undefined && !['internet', 'lan'].includes(input.access)) throw new Error('请选择外网或局域网导出方式。');
+        const internet = input.access === 'internet';
+        let base;
+        if (internet) {
+          if (!options.internetTunnel) throw new Error('当前服务尚不支持外网链接，请停止服务并重新启动新版工具。');
+          base = publicOrigin(await options.internetTunnel.ensure());
+        } else {
+          const target = typeof options.publicBaseUrl === 'function' ? options.publicBaseUrl() : options.publicBaseUrl;
+          base = publicOrigin(target || url.origin, options.allowLocal === true);
+        }
         await store.put(token, input.configText, normalizeMetadata(input.metadata));
-        return json({ id: token, url: base + '/sub/' + token + '.yaml' });
+        if (internet) options.internetTunnel.publish(token);
+        return json({ id: token, url: base + '/sub/' + token + '.yaml', access: internet ? 'internet' : 'lan', temporary: internet });
       }
       const revoke = url.pathname.match(/^\/api\/exports\/([a-f0-9]{64})$/);
-      if (request.method === 'DELETE' && revoke) { await store.delete(revoke[1]); return json({ revoked: true }); }
+      if (request.method === 'DELETE' && revoke) { await store.delete(revoke[1]); options.internetTunnel?.unpublish(revoke[1]); return json({ revoked: true }); }
       if (request.method === 'POST' && url.pathname === '/api/stop' && options.onStop) { options.onStop(); return json({ stopped: true }); }
       return json({ error: '不支持的操作。' }, 404);
     } catch (error) {

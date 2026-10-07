@@ -1,6 +1,6 @@
 {
   "name": "clash-adult-blocker",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Local HTML tool that adds adult-domain blocking rules to Clash/Mihomo subscriptions and exports importable subscription URLs.",
   "license": "GPL-3.0-only",
@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node src/web-server.mjs",
     "build": "node build.cjs",
-    "test": "node --test src/guard-core.test.cjs tests/subscription.test.cjs tests/subscription-ui.test.cjs tests/subscription-metadata.test.cjs tests/web-export.test.cjs",
+    "test": "node --test src/guard-core.test.cjs tests/subscription.test.cjs tests/subscription-ui.test.cjs tests/subscription-metadata.test.cjs tests/web-export.test.cjs tests/internet-tunnel.test.cjs",
     "verify": "node tests/check-artifact.cjs"
   }
 }

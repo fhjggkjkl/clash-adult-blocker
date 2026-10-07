@@ -4,9 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
-import { createWebHandler, randomToken } from './web-service.mjs';
+import { createWebHandler, randomToken, SERVICE_VERSION } from './web-service.mjs';
 import reader from './subscription-server.cjs';
 import metadataHelpers from './subscription-metadata.cjs';
+import { createInternetTunnel } from './internet-tunnel.mjs';
 const { normalizeMetadata } = metadataHelpers;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export function lanAddresses(interfaces = os.networkInterfaces()) {
@@ -50,7 +51,7 @@ export function fileStore(directory) {
 }
 export function createServer(options) {
   let server;
-  const onStop = () => setTimeout(() => { server.closeAllConnections(); server.close(); }, 200).unref();
+  const onStop = () => setTimeout(async () => { await options.internetTunnel?.close(); server.closeAllConnections(); server.close(); }, 200).unref();
   const handler = createWebHandler({ ...options, onStop, html: options.html || (() => fs.readFile(path.join(root, 'clash-adult-guard.html'), 'utf8')), readRemote: options.readRemote || reader.readRemoteDetails });
   server = http.createServer(async (incoming, outgoing) => {
     try {
@@ -63,6 +64,7 @@ export function createServer(options) {
       outgoing.end(Buffer.from(await result.arrayBuffer()));
     } catch (_) { outgoing.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); outgoing.end('服务处理失败，请重试。'); }
   });
+  server.once('close', () => { void options.internetTunnel?.close(); });
   return server;
 }
 async function main() {
@@ -81,17 +83,43 @@ async function main() {
   const host = process.env.HOST || '0.0.0.0';
   const port = Number(process.env.PORT || 17896);
   const statePath = path.join(directory, 'server.json');
+  let previousService = null;
   try {
     const state = JSON.parse(await fs.readFile(statePath, 'utf8'));
     const localUrl = 'http://127.0.0.1:' + state.port + '/tool/' + ownerToken;
     const response = await fetch(localUrl, { signal: AbortSignal.timeout(1000) });
-    if (response.ok && (await response.text()).includes('content="' + ownerToken + '"')) { process.stdout.write(JSON.stringify({ ready: true, url: localUrl, localUrl, reused: true }) + '\n'); return; }
+    const html = await response.text();
+    if (response.ok && html.includes('content="' + ownerToken + '"')) {
+      if (html.includes('name="local-service-version" content="' + SERVICE_VERSION + '"')) {
+        process.stdout.write(JSON.stringify({ ready: true, url: localUrl, localUrl, reused: true }) + '\n'); return;
+      }
+      previousService = { localUrl, port: state.port };
+    }
   } catch (_) {}
-  const server = createServer({ ownerToken, store: fileStore(path.join(directory, 'exports')), allowLocal: true, publicBaseUrl: () => {
+  if (previousService) {
+    const base = 'http://127.0.0.1:' + previousService.port;
+    const stopped = await fetch(base + '/api/stop', { method: 'POST', headers: { 'X-Guard-Token': ownerToken }, signal: AbortSignal.timeout(2000) });
+    if (!stopped.ok) throw new Error('无法停止旧版服务，请在旧页面点击停止本地服务后重试。');
+    let oldStillRunning = true;
+    for (let attempt = 0; attempt < 30 && oldStillRunning; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      try {
+        const response = await fetch(previousService.localUrl, { signal: AbortSignal.timeout(500) });
+        oldStillRunning = response.ok && (await response.text()).includes('content="' + ownerToken + '"');
+      } catch (_) { oldStillRunning = false; }
+    }
+    if (oldStillRunning) throw new Error('旧版服务尚未退出，请稍后重新打开工具。');
+  }
+  const store = fileStore(path.join(directory, 'exports'));
+  const internetTunnel = createInternetTunnel({ store, directory });
+  const server = createServer({ ownerToken, store, internetTunnel, allowLocal: true, publicBaseUrl: () => {
     const address = lanAddresses()[0];
     if (!address) throw new Error('未找到手机可访问的电脑地址，请先连接网络后再导出。');
     return 'http://' + address + ':' + server.address().port;
   } });
+  const shutdown = async () => { await internetTunnel.close(); server.closeAllConnections(); server.close(); };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
   server.on('listening', async () => {
     const localUrl = 'http://127.0.0.1:' + server.address().port + '/tool/' + ownerToken;
     await fs.writeFile(statePath, JSON.stringify({ port: server.address().port }), 'utf8');
